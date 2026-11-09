@@ -76,3 +76,49 @@ def agent_main(input):
     print("[AGENT] Exiting agent_main()")
 
     return diff
+
+
+def generate_unified_diff(repo_dir=None):
+    """
+    Generate a unified Git patch containing all task changes.
+
+    Includes modified, deleted, staged, unstaged, and new non-ignored files.
+    Returns a non-empty patch string or raises RuntimeError.
+    """
+    from pathlib import Path
+    import subprocess
+
+    root = Path(repo_dir or Path.cwd()).resolve()
+
+    def git(*args):
+        result = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Git command failed: git {' '.join(args)}\n"
+                f"{result.stderr.strip()}"
+            )
+        return result.stdout
+
+    # Resolve the actual repository root.
+    root = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
+
+    # Ridges establishes a baseline commit before agent execution.
+    git("rev-parse", "--verify", "HEAD")
+
+    # Register new files as intent-to-add so they appear in git diff.
+    git("add", "-N", "--", ".")
+
+    # Compare the entire working tree against the original baseline.
+    patch = git("diff", "--binary", "--no-ext-diff", "HEAD", "--")
+
+    if not patch.strip():
+        raise RuntimeError(
+            "No file changes were detected. Cannot return an empty patch."
+        )
+
+    return patch
