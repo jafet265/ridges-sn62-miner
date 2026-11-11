@@ -20,6 +20,13 @@ def git(cwd, *args):
     ).stdout
 
 
+def ignore_git_lock_files(directory, names):
+    """Ignore transient Git lock files when copying test repositories."""
+    if ".git" in Path(directory).parts or Path(directory).name == ".git":
+        return {name for name in names if name.endswith(".lock")}
+    return set()
+
+
 def snapshot(root):
     return {
         p.relative_to(root).as_posix(): p.read_bytes()
@@ -51,11 +58,13 @@ class PatchEngineTests(unittest.TestCase):
             git(workspace, "init", "-q")
             git(workspace, "config", "user.name", "Patch Test")
             git(workspace, "config", "user.email", "test@example.invalid")
+            git(workspace, "config", "maintenance.auto", "false")
+            git(workspace, "config", "gc.auto", "0")
             git(workspace, "add", "-A")
             git(workspace, "commit", "-qm", "baseline")
 
             # Preserve a clean copy for independent patch application.
-            shutil.copytree(workspace, verifier)
+            shutil.copytree(workspace, verifier, ignore=ignore_git_lock_files)
 
             # Modify an existing file.
             (workspace / "src" / "existing.py").write_text(

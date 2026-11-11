@@ -36,6 +36,13 @@ def snapshot(root: Path) -> dict[str, bytes]:
     }
 
 
+def ignore_git_lock_files(directory: str, names: list[str]) -> set[str]:
+    """Exclude transient Git lock files from temporary repository copies."""
+    if ".git" in Path(directory).parts or Path(directory).name == ".git":
+        return {name for name in names if name.endswith(".lock")}
+    return set()
+
+
 def self_test_agent(_input: dict) -> str:
     """Fake agent: modifies an existing file and creates a new one."""
     root = Path.cwd()
@@ -125,11 +132,13 @@ def main() -> int:
             "git", "config", "user.email",
             "harness@example.invalid",
         ], workspace)
+        run(["git", "config", "maintenance.auto", "false"], workspace)
+        run(["git", "config", "gc.auto", "0"], workspace)
         run(["git", "add", "-A"], workspace)
         run(["git", "commit", "-qm", "baseline"], workspace)
 
         # Make an untouched copy for independent patch verification.
-        shutil.copytree(workspace, verifier)
+        shutil.copytree(workspace, verifier, ignore=ignore_git_lock_files)
 
         original_cwd = Path.cwd()
 
